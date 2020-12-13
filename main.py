@@ -1,29 +1,15 @@
 '''
 main.py
 ----------
-Hugh Lei
-
-2020年12月13日
-
 爬取glassdoor数据的爬虫
 
 亟需解决的问题：
 多次爬取IP被封禁——ProxyPool 爬虫代理IP池；
-爬取效率的问题，爬虫改成多线程的；
+爬取效率的问题，得改成多线程的；
+爬虫无法翻页
 
-最终获得的数据格式：
-Review date
-Employee position
-Employee location
-Employee status (current/former)
-Review title
-Employee years at company
-Number of helpful votes
-Pros text
-Cons text
-Advice to mgmttext
-Ratings for each of 5 categories
-Overall rating
+爬虫局限性：
+只能爬取英文评价，无法获取小语种评价
 '''
 
 import datetime as dt
@@ -32,18 +18,15 @@ import logging.config
 import time
 import urllib
 from argparse import ArgumentParser
-
 import numpy as np
 import pandas as pd
 import selenium
 from selenium import webdriver as wd
-
 from schema import SCHEMA
 
 start = time.time()
-# 设定默认链接
-DEFAULT_URL = ('https://www.glassdoor.com/Overview/Working-at-Premise-Data-Corporation-EI_IE952471.11,35.htm')
-# 搞个命令行，程序整的更快些
+# 设定默认链接，以airbnb为例
+DEFAULT_URL = ('https://www.glassdoor.com/Overview/Working-at-Airbnb-EI_IE391850.11,17.htm')
 parser = ArgumentParser()
 parser.add_argument('-u', '--url', help='URL of the company\'s Glassdoor landing page.', default=DEFAULT_URL)
 parser.add_argument('-f', '--file', default='glassdoor_ratings.csv', help='Output file.')
@@ -68,14 +51,14 @@ elif args.max_date and args.min_date:
 if args.credentials:
     with open(args.credentials) as f:
         d = json.loads(f.read())
-        args.username = d['gewitter@126.com']
-        args.password = d['qwerty00']
+        args.username = d['username']
+        args.password = d['password']
 else:
     try:
         with open('secret.json') as f:
             d = json.loads(f.read())
-            args.username = d['gewitter@126.com']
-            args.password = d['qwerty00']
+            args.username = d['username']
+            args.password = d['password']
     except FileNotFoundError:
         msg = 'Please provide Glassdoor credentials. Credentials can be provided as a secret.json file in the working ' \
               'directory, or passed at the command line using the --username and --password flags. '
@@ -94,8 +77,15 @@ logging.getLogger('selenium').setLevel(logging.CRITICAL)
 
 
 def scrape(field, review, author):
+    def scrape_featured(review):
+        res = review.find_element_by_class_name('justify-content-between').text
+        if 'Featured Review' not in res:
+            return 0
+        else:
+            return 1
+
     def scrape_date(review):
-        return review.find_element_by_tag_name('time').get_attribute('datetime')
+        return review.find_element_by_class_name('align-items-center').text
 
     def scrape_emp_title(review):
         if 'Anonymous Employee' not in review.text:
@@ -108,7 +98,6 @@ def scrape(field, review, author):
             res = np.nan
         return res
 
-    # 抓取评论者状态，是否
     def scrape_location(review):
         if 'in' in review.text:
             try:
@@ -119,7 +108,6 @@ def scrape(field, review, author):
             res = np.nan
         return res
 
-    # 抓取评论者状态，是否离职
     def scrape_status(review):
         try:
             res = author.text.split('-')[0]
@@ -131,11 +119,6 @@ def scrape(field, review, author):
     def scrape_rev_title(review):
         return review.find_element_by_class_name('summary').text.strip('"')
 
-    def scrape_years(review):
-        res = review.find_element_by_class_name('common__EiReviewTextStyles__allowLineBreaks').find_element_by_xpath(
-            'preceding-sibling::p').text
-        return res
-
     def scrape_helpful(review):
         try:
             helpful = review.find_element_by_class_name('helpfulCount')
@@ -144,48 +127,30 @@ def scrape(field, review, author):
             res = 0
         return res
 
-    def expand_show_more(section):
-        try:
-            # more_content = section.find_element_by_class_name('moreContent')
-            more_link = section.find_element_by_class_name('v2__EIReviewDetailsV2__continueReading')
-            more_link.click()
-        except Exception:
-            pass
-
     def scrape_pros(review):
         try:
-            pros = review.find_element_by_class_name('common__EiReviewTextStyles__allowLineBreaks')
-            expand_show_more(pros)
-            res = pros.text.replace('Pros', '')
-            res = res.strip()
+            res = review.find_element_by_class_name('v2__EIReviewDetailsV2__isExpanded').text
         except Exception:
             res = np.nan
         return res
 
     def scrape_cons(review):
         try:
-            cons = review.find_elements_by_class_name('common__EiReviewTextStyles__allowLineBreaks')[1]
-            expand_show_more(cons)
-            res = cons.text.replace('Cons', '')
-            res = res.strip()
+            res = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[1].text
         except Exception:
             res = np.nan
         return res
 
     def scrape_advice(review):
         try:
-            advice = review.find_elements_by_class_name('common__EiReviewTextStyles__allowLineBreaks')[2]
-            res = advice.text.replace('Advice to Management', '')
-            res = res.strip()
+            res = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[2].text
         except Exception:
             res = np.nan
         return res
 
     def scrape_overall_rating(review):
         try:
-            ratings = review.find_element_by_class_name('gdStars')
-            overall = ratings.find_element_by_class_name('rating').find_element_by_class_name('value-title')
-            res = overall.get_attribute('title')
+            res = review.find_element_by_class_name('v2__EIReviewsRatingsStylesV2__ratingNum').text
         except Exception:
             res = np.nan
         return res
@@ -193,8 +158,7 @@ def scrape(field, review, author):
     def _scrape_subrating(i):
         try:
             ratings = review.find_element_by_class_name('gdStars')
-            subratings = ratings.find_element_by_class_name(
-                'subRatings').find_element_by_tag_name('ul')
+            subratings = ratings.find_element_by_class_name('subRatings').find_element_by_tag_name('ul')
             this_one = subratings.find_elements_by_tag_name('li')[i]
             res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
         except Exception:
@@ -249,13 +213,14 @@ def scrape(field, review, author):
         except:
             return np.nan
 
+
     funcs = [
+        scrape_featured,
         scrape_date,
         scrape_emp_title,
         scrape_location,
         scrape_status,
         scrape_rev_title,
-        scrape_years,
         scrape_helpful,
         scrape_pros,
         scrape_cons,
@@ -277,13 +242,6 @@ def scrape(field, review, author):
 
 
 def extract_from_page():
-    def is_featured(review):
-        try:
-            review.find_element_by_class_name('featuredFlag')
-            return True
-        except selenium.common.exceptions.NoSuchElementException:
-            return False
-
     def extract_review(review):
         author = review.find_element_by_class_name('authorInfo')
         res = {}
@@ -297,16 +255,13 @@ def extract_from_page():
 
     res = pd.DataFrame([], columns=SCHEMA)
 
-    reviews = browser.find_elements_by_class_name('empReview')
+    reviews = browser.find_elements_by_class_name('gdReview')
     logger.info(f'Found {len(reviews)} reviews on page {page[0]}')
 
     for review in reviews:
-        if not is_featured(review):
-            data = extract_review(review)
-            logger.info(f'Scraped data for "{data["review_title"]}"({data["date"]})')
-            res.loc[idx[0]] = data
-        else:
-            logger.info('Discarding a featured review')
+        data = extract_review(review)
+        logger.info(f'Scraped data for "{data["review_title"]}"({data["date"]})')
+        res.loc[idx[0]] = data
         idx[0] = idx[0] + 1
 
     if args.max_date and (pd.to_datetime(res['date']).max() > args.max_date) or args.min_date and (
@@ -368,8 +323,8 @@ def sign_in():
 
     # import pdb;pdb.set_trace()
 
-    email_field = browser.find_element_by_name('gewitter@126.com')
-    password_field = browser.find_element_by_name('qwerty00')
+    email_field = browser.find_element_by_name('username')
+    password_field = browser.find_element_by_name('password')
     submit_btn = browser.find_element_by_xpath('//button[@type="submit"]')
 
     email_field.send_keys(args.username)
@@ -386,7 +341,7 @@ def get_browser():
     if args.headless:
         chrome_options.add_argument('--headless')
     chrome_options.add_argument('log-level=3')
-    browser = wd.Chrome(options=chrome_options)
+    browser = wd.Chrome(executable_path='./chromedriver.exe', options=chrome_options)
     return browser
 
 
@@ -414,7 +369,6 @@ idx = [0]
 date_limit_reached = [False]
 
 
-# 主程序逻辑：登录，
 def main():
     logger.info(f'Scraping up to {args.limit} reviews.')
     res = pd.DataFrame([], columns=SCHEMA)
@@ -451,6 +405,7 @@ def main():
 
     end = time.time()
     logger.info(f'Finished in {end - start} seconds')
+    browser.quit()
 
 
 if __name__ == '__main__':
