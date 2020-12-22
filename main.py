@@ -89,9 +89,13 @@ def scrape(field, review, author):
         return review.find_element_by_class_name('align-items-center').text
 
     def scrape_time(review):
-        res = review.find_element_by_class_name('align-items-center').get_attribute('datetime')
-        # res = res.strftime('%H:%M')
-        return res
+        try:
+            res = review.find_element_by_class_name('justify-content-between').find_element_by_tag_name('time').get_attribute('datetime')
+            res = res.split()[4]
+            return res
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_headline(review):
         return review.find_element_by_class_name('summary').text.strip('"')
@@ -128,6 +132,32 @@ def scrape(field, review, author):
             logger.warning('Failed to scrape employee_status')
             res = np.nan
         return res
+
+    def scrape_contract(review):
+        try:
+            contract = review.find_element_by_class_name('mainText').text
+            if 'full-time' in contract:
+                return 'full-time'
+            elif 'part-time' in contract:
+                return 'part-time'
+            elif 'contract' in contract:
+                return 'contract'
+            elif 'intern' in contract:
+                return 'intern'
+            elif 'freelance' in contract:
+                return 'freelance'
+        except Exception:
+            res = np.nan
+            return res
+
+    def scrape_years(review):
+        try:
+            years = review.find_element_by_class_name('mainText').text
+            years = years.split('for')[1]
+            return years
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_helpful(review):
         try:
@@ -295,6 +325,8 @@ def scrape(field, review, author):
         scrape_role,
         scrape_location,
         scrape_status,
+        scrape_contract,
+        scrape_years,
         scrape_helpful,
         scrape_pros,
         scrape_cons,
