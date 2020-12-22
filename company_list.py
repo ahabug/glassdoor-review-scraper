@@ -1,0 +1,3 @@
+COMPANY_LIST = [
+    'amazon'
+]

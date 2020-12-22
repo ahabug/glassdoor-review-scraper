@@ -1,17 +1,3 @@
-'''
-main.py
-----------
-爬取glassdoor数据的爬虫
-
-亟需解决的问题：
-多次爬取IP被封禁——ProxyPool 爬虫代理IP池；
-爬取效率的问题，得改成多线程的；
-爬虫无法翻页
-
-爬虫局限性：
-只能爬取英文评价，无法获取小语种评价
-'''
-
 import datetime as dt
 import json
 import logging.config
@@ -23,10 +9,11 @@ import pandas as pd
 import selenium
 from selenium import webdriver as wd
 from schema import SCHEMA
+from url_list import URL_LIST
 
 start = time.time()
 # 设定默认链接，以airbnb为例
-DEFAULT_URL = ('https://www.glassdoor.com/Overview/Working-at-Airbnb-EI_IE391850.11,17.htm')
+DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Airbnb-EI_IE391850.11,17.htm'
 parser = ArgumentParser()
 parser.add_argument('-u', '--url', help='URL of the company\'s Glassdoor landing page.', default=DEFAULT_URL)
 parser.add_argument('-f', '--file', default='glassdoor_ratings.csv', help='Output file.')
@@ -84,13 +71,37 @@ def scrape(field, review, author):
         else:
             return 1
 
+    def scrape_covid(review):
+        res = review.find_element_by_class_name('justify-content-between').text
+        if 'COVID-19' not in res:
+            return 0
+        else:
+            return 1
+
+    def scrape_anonymous(review):
+        res = review.find_element_by_class_name('authorJobTitle').text
+        if 'Anonymous' in res:
+            return 1
+        else:
+            return 0
+
     def scrape_date(review):
         return review.find_element_by_class_name('align-items-center').text
 
-    def scrape_emp_title(review):
+    def scrape_time(review):
+        res = review.find_element_by_class_name('align-items-center').get_attribute('datetime')
+        # res = res.strftime('%H:%M')
+        return res
+
+    def scrape_headline(review):
+        return review.find_element_by_class_name('summary').text.strip('"')
+
+    def scrape_role(review):
         if 'Anonymous Employee' not in review.text:
             try:
-                res = author.find_element_by_class_name('authorJobTitle').text.split('-')[1]
+                res = author.find_element_by_class_name('authorJobTitle').text
+                if '-' in res:
+                    res = res.split('-')[1]
             except Exception:
                 logger.warning('Failed to scrape employee_title')
                 res = np.nan
@@ -111,13 +122,12 @@ def scrape(field, review, author):
     def scrape_status(review):
         try:
             res = author.text.split('-')[0]
+            if 'Employee' not in res:
+                res = np.nan
         except Exception:
             logger.warning('Failed to scrape employee_status')
             res = np.nan
         return res
-
-    def scrape_rev_title(review):
-        return review.find_element_by_class_name('summary').text.strip('"')
 
     def scrape_helpful(review):
         try:
@@ -148,92 +158,157 @@ def scrape(field, review, author):
             res = np.nan
         return res
 
-    def scrape_overall_rating(review):
+    def scrape_main_rating(review):
         try:
             res = review.find_element_by_class_name('v2__EIReviewsRatingsStylesV2__ratingNum').text
         except Exception:
             res = np.nan
         return res
 
-    def _scrape_subrating(i):
+    def scrape_work_life_balance(review):
         try:
-            ratings = review.find_element_by_class_name('gdStars')
-            subratings = ratings.find_element_by_class_name('subRatings').find_element_by_tag_name('ul')
-            this_one = subratings.find_elements_by_tag_name('li')[i]
-            res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Balance' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
         except Exception:
             res = np.nan
-        return res
-
-    def scrape_work_life_balance(review):
-        return _scrape_subrating(0)
+            return res
 
     def scrape_culture_and_values(review):
-        return _scrape_subrating(1)
+        try:
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Culture' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
+        except Exception:
+            res = np.nan
+            return res
+
+    def scrape_diversity_inclusion(review):
+        try:
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Diversity' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_career_opportunities(review):
-        return _scrape_subrating(2)
+        try:
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Career' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_comp_and_benefits(review):
-        return _scrape_subrating(3)
+        try:
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Compensation' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_senior_management(review):
-        return _scrape_subrating(4)
+        try:
+            for i in range(6):
+                subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
+                if 'Senior' in subratings_name:
+                    subratings = review.find_element_by_class_name(
+                        'subRatings__SubRatingsStyles__subRatings').find_element_by_tag_name('ul')
+                    this_one = subratings.find_elements_by_tag_name('li')[i]
+                    res = this_one.find_element_by_class_name('gdBars').get_attribute('title')
+                    return res
+        except Exception:
+            res = np.nan
+            return res
 
     def scrape_recommends(review):
         try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            return res[0]
+            res = review.find_element_by_class_name('reviewBodyCell').text
+            if 'Recommends' or 'Recommend' in res:
+                res = res.split('\n')
+                return res[0]
         except:
             return np.nan
 
     def scrape_outlook(review):
         try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            if len(res) == 2 or len(res) == 3:
-                if 'CEO' in res[1]:
-                    return np.nan
-                return res[1]
-            return np.nan
-        except:
-            return np.nan
-
-    def scrape_approve_ceo(review):
-        try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            if len(res) == 3:
-                return res[2]
-            if len(res) == 2:
-                if 'CEO' in res[1]:
+            res = review.find_element_by_class_name('reviewBodyCell').text
+            if 'Outlook' in res:
+                res = res.split('\n')
+                if 'Recommends' or 'Recommend' in res:
                     return res[1]
+                else:
+                    return res[0]
             return np.nan
         except:
             return np.nan
 
+    def scrape_ceo_approval(review):
+        try:
+            res = review.find_element_by_class_name('reviewBodyCell').text
+            if 'CEO' in res:
+                res = res.split('\n')
+                if len(res) == 3:
+                    return res[2]
+                if len(res) == 2:
+                    return res[1]
+                return res[0]
+            return np.nan
+        except:
+            return np.nan
 
     funcs = [
         scrape_featured,
+        scrape_covid,
+        scrape_anonymous,
         scrape_date,
-        scrape_emp_title,
+        scrape_time,
+        scrape_headline,
+        scrape_role,
         scrape_location,
         scrape_status,
-        scrape_rev_title,
         scrape_helpful,
         scrape_pros,
         scrape_cons,
         scrape_advice,
-        scrape_overall_rating,
+        scrape_main_rating,
         scrape_work_life_balance,
         scrape_culture_and_values,
+        scrape_diversity_inclusion,
         scrape_career_opportunities,
         scrape_comp_and_benefits,
         scrape_senior_management,
         scrape_recommends,
         scrape_outlook,
-        scrape_approve_ceo
+        scrape_ceo_approval
     ]
 
     fdict = dict((s, f) for (s, f) in zip(SCHEMA, funcs))
@@ -245,7 +320,6 @@ def extract_from_page():
     def extract_review(review):
         author = review.find_element_by_class_name('authorInfo')
         res = {}
-        # import pdb;pdb.set_trace()
         for field in SCHEMA:
             res[field] = scrape(field, review, author)
         assert set(res.keys()) == set(SCHEMA)
@@ -256,11 +330,12 @@ def extract_from_page():
     res = pd.DataFrame([], columns=SCHEMA)
 
     reviews = browser.find_elements_by_class_name('gdReview')
+
     logger.info(f'Found {len(reviews)} reviews on page {page[0]}')
 
     for review in reviews:
         data = extract_review(review)
-        logger.info(f'Scraped data for "{data["review_title"]}"({data["date"]})')
+        logger.info(f'Scraped data for "{data["headline"]}"({data["date"]})')
         res.loc[idx[0]] = data
         idx[0] = idx[0] + 1
 
@@ -275,7 +350,7 @@ def extract_from_page():
 def more_pages():
     try:
         # paging_control = browser.find_element_by_class_name('pagingControls')
-        next_ = browser.find_element_by_class_name('pagination__PaginationStyle__next')
+        next_ = browser.find_element_by_class_name('nextButton')
         next_.find_element_by_tag_name('a')
         return True
     except selenium.common.exceptions.NoSuchElementException:
@@ -285,7 +360,7 @@ def more_pages():
 def go_to_next_page():
     logger.info(f'Going to page {page[0] + 1}')
     # paging_control = browser.find_element_by_class_name('pagingControls')
-    next_ = browser.find_element_by_class_name('pagination__PaginationStyle__next').find_element_by_tag_name('a')
+    next_ = browser.find_element_by_class_name('nextButton').find_element_by_tag_name('a')
     browser.get(next_.get_attribute('href'))
     time.sleep(1)
     page[0] = page[0] + 1
@@ -320,8 +395,6 @@ def sign_in():
 
     url = 'https://www.glassdoor.com/profile/login_input.htm'
     browser.get(url)
-
-    # import pdb;pdb.set_trace()
 
     email_field = browser.find_element_by_name('username')
     password_field = browser.find_element_by_name('password')
@@ -393,8 +466,10 @@ def main():
     reviews_df = extract_from_page()
     res = res.append(reviews_df)
 
-    # import pdb;pdb.set_trace()
-
+    # print(more_pages())
+    # print(args.limit)
+    # print(len(res))
+    
     while more_pages() and len(res) < args.limit and not date_limit_reached[0]:
         go_to_next_page()
         reviews_df = extract_from_page()

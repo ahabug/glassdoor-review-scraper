@@ -2,6 +2,8 @@ Forked from [MatthewChatham/glassdoor-review-scraper](https://github.com/Matthew
 
 Fixed many bugs and simplified the code (Dec.14, 2020)
 
+
+
 # Usage
 ```
 usage: main.py [-h] [-u URL] [-f FILE] [--headless] [--username USERNAME]
