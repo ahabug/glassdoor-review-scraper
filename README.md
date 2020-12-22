@@ -1,6 +1,8 @@
 Forked from [MatthewChatham/glassdoor-review-scraper](https://github.com/MatthewChatham/glassdoor-review-scraper)
 
-Fixed many bugs and simplified the code (Dec.14, 2020)
+Fixed many bugs and simplified the code (Dec.22, 2020)
+
+The good news is that I wrote a new crawler using the requests lib. The new crawler is much more efficient, which avoid loading heavy JavaScript document. The bad news is that Glassdoor changed the front-end CSS framework last week, and the efficient crawler doesn't work now. It cannot obtain the comments. What all I have committed returned to the original point. (ya, so sad)
 
 
 
