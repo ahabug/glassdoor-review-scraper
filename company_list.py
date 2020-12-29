@@ -1,3 +1,7 @@
 COMPANY_LIST = [
-    'amazon'
+    'amazon',
+    'google',
+    'Goldman Sachs',
+    'airbnb',
+    'tesla'
 ]

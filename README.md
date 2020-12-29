@@ -2,11 +2,13 @@ Forked from [MatthewChatham/glassdoor-review-scraper](https://github.com/Matthew
 
 Fixed many bugs and simplified the code (Dec.22, 2020)
 
-The good news is that I wrote a new crawler using the requests lib. The new crawler is much more efficient, which avoid loading heavy JavaScript document. The bad news is that Glassdoor changed the front-end CSS framework last week, and the efficient crawler doesn't work now. It cannot obtain the comments. What all I have committed returned to the original point. (ya, so sad)
-
-
+The good news is that I wrote a new crawler using the requests lib. The new crawler is much more efficient, which avoid
+loading heavy JavaScript document. The bad news is that Glassdoor changed the front-end CSS framework last week, and the
+efficient crawler doesn't work now. It cannot obtain the comments. What all I have committed returned to the original
+point. (ya, so sad)
 
 # Usage
+
 ```
 usage: main.py [-h] [-u URL] [-f FILE] [--headless] [--username USERNAME]
                [-p PASSWORD] [-c CREDENTIALS] [-l LIMIT] [--start_from_url] 
@@ -32,9 +34,12 @@ optional arguments:
                                               Glassdoor reviews DESCENDING by date.
 ```
 
-Run the script as follows, taking Wells Fargo as an example. You can pass `--headless` to prevent the Chrome window from being visible, and the `--limit` option will limit how many reviews get scraped. The`-f` option specifies the output file, which defaults to `glassdoor_reviews.csv`.  
+Run the script as follows, taking Wells Fargo as an example. You can pass `--headless` to prevent the Chrome window from
+being visible, and the `--limit` option will limit how many reviews get scraped. The`-f` option specifies the output
+file, which defaults to `glassdoor_reviews.csv`.
 
 ### Example 1
+
 Suppose you want to get the top 1,000 most popular reviews for Wells Fargo. Run the command as follows:
 
 `python main.py --headless --url "https://www.glassdoor.com/Overview/Working-at-Wells-Fargo-EI_IE8876.11,22.htm" --limit 1000 -f wells_fargo_reviews.csv`
@@ -42,11 +47,15 @@ Suppose you want to get the top 1,000 most popular reviews for Wells Fargo. Run 
 **Note**: To be safe, always surround the URL with quotes. This only matters in the presence of a query string.
 
 ### Example 2: Date Filtering
-If you want to scrape all reviews in a date range, sort reviews on Glassdoor ascending/descending by date, find the page with the appropriate starting date, set the max/min date to the other end of your desired time range, and set limit to 99999.
+
+If you want to scrape all reviews in a date range, sort reviews on Glassdoor ascending/descending by date, find the page
+with the appropriate starting date, set the max/min date to the other end of your desired time range, and set limit to
+99999.
 
 Suppose you want to scrape all reviews from McDonald's that were posted in 2010:
 
 1. Navigate to McDonald's Glassdoor page and sort reviews ascending by date.
-2. Find the first page with a review from 2010, which happens to be [page 13](https://www.glassdoor.com/Reviews/McDonald-s-Reviews-E432_P13.htm?sort.sortType=RD&sort.ascending=true).
+2. Find the first page with a review from 2010, which happens to
+   be [page 13](https://www.glassdoor.com/Reviews/McDonald-s-Reviews-E432_P13.htm?sort.sortType=RD&sort.ascending=true).
 3. Send the command to the script:
-`python main.py --headless --start_from_url --limit 9999 --max_date 2010-12-31 --url "https://www.glassdoor.com/Reviews/McDonald-s-Reviews-E432_P13.htm?sort.sortType=RD&sort.ascending=true"`
+   `python main.py --headless --start_from_url --limit 9999 --max_date 2010-12-31 --url "https://www.glassdoor.com/Reviews/McDonald-s-Reviews-E432_P13.htm?sort.sortType=RD&sort.ascending=true"`
