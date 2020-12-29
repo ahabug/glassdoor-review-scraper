@@ -9,7 +9,6 @@ import pandas as pd
 import selenium
 from selenium import webdriver as wd
 from schema import SCHEMA
-from url_list import URL_LIST
 
 start = time.time()
 # 设定默认链接，以airbnb为例
@@ -90,7 +89,8 @@ def scrape(field, review, author):
 
     def scrape_time(review):
         try:
-            res = review.find_element_by_class_name('justify-content-between').find_element_by_tag_name('time').get_attribute('datetime')
+            res = review.find_element_by_class_name('justify-content-between').find_element_by_tag_name(
+                'time').get_attribute('datetime')
             res = res.split()[4]
             return res
         except Exception:
@@ -357,12 +357,17 @@ def extract_from_page():
         assert set(res.keys()) == set(SCHEMA)
         return res
 
+    max_reviews = browser.find_element_by_class_name('common__EIReviewSortBarStyles__sortsHeader')
+    max_reviews = max_reviews.find_element_by_xpath('//h2/span/strong').text
+    max_reviews = max_reviews.split()[0]
+    max_reviews = max_reviews.replace(',', '')
+    max_pages = int((int(max_reviews)-1)/10)+1
+    logger.info(f'{max_reviews} English reviews in {max_pages} pages.')
     logger.info(f'Extracting reviews from page {page[0]}')
 
     res = pd.DataFrame([], columns=SCHEMA)
 
     reviews = browser.find_elements_by_class_name('gdReview')
-
     logger.info(f'Found {len(reviews)} reviews on page {page[0]}')
 
     for review in reviews:
@@ -404,8 +409,8 @@ def no_reviews():
 
 
 def navigate_to_reviews():
-    logger.info('Navigating to company reviews')
-
+    company_name = DEFAULT_URL.split('-')[2]
+    logger.info(f'Navigating to company {company_name} reviews')
     browser.get(args.url)
     time.sleep(1)
 
@@ -452,9 +457,11 @@ def get_browser():
 
 def get_current_page():
     logger.info('Getting current page number')
-    paging_control = browser.find_element_by_class_name('pagingControls')
-    current = int(paging_control.find_element_by_xpath('//ul//li[contains(concat(\' \',normalize-space(@class),\' \'),\' current \')]\
-        //span[contains(concat(\' \',normalize-space(@class),\' \'),\' disabled \')]').text.replace(',', ''))
+    paging_control = browser.find_element_by_class_name('paginationFooter')
+    current = paging_control.text.split('\b')[1]
+    current = int(current/10)
+    # current = int(paging_control.find_element_by_xpath('//ul//li[contains(concat(\' \',normalize-space(@class),\' \'),\' current \')]\
+    #     //span[contains(concat(\' \',normalize-space(@class),\' \'),\' disabled \')]').text.replace(',', ''))
     return current
 
 
@@ -498,10 +505,6 @@ def main():
     reviews_df = extract_from_page()
     res = res.append(reviews_df)
 
-    # print(more_pages())
-    # print(args.limit)
-    # print(len(res))
-    
     while more_pages() and len(res) < args.limit and not date_limit_reached[0]:
         go_to_next_page()
         reviews_df = extract_from_page()
