@@ -11,8 +11,8 @@ from selenium import webdriver as wd
 from schema import SCHEMA
 
 start = time.time()
-# 设定默认链接，以airbnb为例
-DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Airbnb-EI_IE391850.11,17.htm'
+# 设定默认链接，以Shopee为例
+DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Shopee-EI_IE1263091.11,17.htm'
 parser = ArgumentParser()
 parser.add_argument('-u', '--url', help='URL of the company\'s Glassdoor landing page.', default=DEFAULT_URL)
 parser.add_argument('-f', '--file', default='glassdoor_ratings.csv', help='Output file.')
@@ -20,7 +20,7 @@ parser.add_argument('--headless', action='store_true', help='Run Chrome in headl
 parser.add_argument('--username', help='Email address used to sign in to GD.')
 parser.add_argument('-p', '--password', help='Password to sign in to GD.')
 parser.add_argument('-c', '--credentials', help='Credentials file')
-parser.add_argument('-l', '--limit', default=25, action='store', type=int, help='Max reviews to scrape')
+parser.add_argument('-l', '--limit', default=60000, action='store', type=int, help='Max reviews to scrape')
 parser.add_argument('--start_from_url', action='store_true', help='Start scraping from the passed URL.')
 parser.add_argument('--max_date', help='Latest review date to scrape. Only use this option with --start_from_url.\
     You also must have sorted Glassdoor reviews ASCENDING by date.', type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"))
@@ -28,6 +28,8 @@ parser.add_argument('--min_date', help='Earliest review date to scrape. Only use
     You also must have sorted Glassdoor reviews DESCENDING by date.',
                     type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"))
 args = parser.parse_args()
+# args.start_from_url = 'https://www.glassdoor.com/Reviews/Shopee-Reviews-E1263091_P29.htm'
+# args.url = 'https://www.glassdoor.com/Reviews/Shopee-Reviews-E1263091_P29.htm'
 
 if not args.start_from_url and (args.max_date or args.min_date):
     raise Exception('Invalid argument combination: No starting url passed, but max/min date specified.')
@@ -354,30 +356,33 @@ def scrape(field, review, author):
     return fdict[field](review)
 
 
-def extract_from_page():
-    def extract_review(review):
-        author = review.find_element_by_class_name('authorInfo')
-        res = {}
-        for field in SCHEMA:
-            res[field] = scrape(field, review, author)
-        assert set(res.keys()) == set(SCHEMA)
-        return res
-
+def get_max_reviews():
     max_reviews = browser.find_element_by_class_name('common__EIReviewSortBarStyles__sortsHeader')
     max_reviews = max_reviews.find_element_by_xpath('//h2/span/strong').text
     max_reviews = max_reviews.split()[0]
     max_reviews = max_reviews.replace(',', '')
-    max_pages = int((int(max_reviews)-1)/10)+1
-    logger.info(f'{max_reviews} English reviews in {max_pages} pages.')
-    logger.info(f'Extracting reviews from page {page[0]}')
+    return int(max_reviews)
+
+
+def extract_from_page():
+    def extract_review(review):
+        try:
+            author = review.find_element_by_class_name('authorInfo')
+            res = {}
+            for field in SCHEMA:
+                res[field] = scrape(field, review, author)
+            assert set(res.keys()) == set(SCHEMA)
+            return res
+        except selenium.common.exceptions.NoSuchElementException:
+            return np.nan
 
     res = pd.DataFrame([], columns=SCHEMA)
-
     reviews = browser.find_elements_by_class_name('gdReview')
-    logger.info(f'Found {len(reviews)} reviews on page {page[0]}')
 
     for review in reviews:
         data = extract_review(review)
+        if pd.isnull(data):
+            continue
         logger.info(f'Scraped data for "{data["headline"]}"({data["date"]})')
         res.loc[idx[0]] = data
         idx[0] = idx[0] + 1
@@ -390,27 +395,6 @@ def extract_from_page():
     return res
 
 
-def more_pages():
-    try:
-        # paging_control = browser.find_element_by_class_name('pagingControls')
-        next_ = browser.find_element_by_class_name('nextButton')
-        next_.click()
-        logger.info(f'Going to page {page[0] + 1}')
-        page[0] = page[0] + 1
-        return True
-    except selenium.common.exceptions.NoSuchElementException:
-        return False
-
-
-# def go_to_next_page():
-#     logger.info(f'Going to page {page[0] + 1}')
-#     # paging_control = browser.find_element_by_class_name('pagingControls')
-#     next_ = browser.find_element_by_class_name('nextButton').find_element_by_tag_name('a')
-#     browser.get(next_.get_attribute('href'))
-#     time.sleep(1)
-#     page[0] = page[0] + 1
-
-
 def no_reviews():
     return False
     # TODO: Find a company with no reviews to test on
@@ -420,7 +404,6 @@ def navigate_to_reviews():
     company_name = DEFAULT_URL.split('-')[2]
     logger.info(f'Navigating to company {company_name} reviews')
     browser.get(args.url)
-    time.sleep(1)
 
     if no_reviews():
         logger.info('No reviews to scrape. Bailing!')
@@ -428,16 +411,12 @@ def navigate_to_reviews():
 
     reviews_cell = browser.find_element_by_xpath('//a[@data-label="Reviews"]')
     reviews_path = reviews_cell.get_attribute('href')
-
-    # reviews_path = driver.current_url.replace('Overview','Reviews')
     browser.get(reviews_path)
-    time.sleep(1)
     return True
 
 
 def sign_in():
     logger.info(f'Signing in to {args.username}')
-
     url = 'https://www.glassdoor.com/profile/login_input.htm'
     browser.get(url)
 
@@ -448,13 +427,10 @@ def sign_in():
     email_field.send_keys(args.username)
     password_field.send_keys(args.password)
     submit_btn.click()
-
-    time.sleep(3)
     browser.get(args.url)
 
 
 def get_browser():
-    logger.info('Configuring browser')
     chrome_options = wd.ChromeOptions()
     if args.headless:
         chrome_options.add_argument('--headless')
@@ -466,11 +442,23 @@ def get_browser():
 def get_current_page():
     logger.info('Getting current page number')
     paging_control = browser.find_element_by_class_name('paginationFooter')
-    current = paging_control.text.split('\b')[1]
-    current = int(current/10)
-    # current = int(paging_control.find_element_by_xpath('//ul//li[contains(concat(\' \',normalize-space(@class),\' \'),\' current \')]\
-    #     //span[contains(concat(\' \',normalize-space(@class),\' \'),\' disabled \')]').text.replace(',', ''))
+    current = paging_control.text.split()[1].replace(',', '')
+    current = int(int(current) / 10)
     return current
+
+
+def more_pages(max_pages):
+    try:
+        next_ = browser.find_element_by_class_name('nextButton')
+        next_.click()
+        logger.info(f'Going to page {page[0] + 1}')
+        page[0] = page[0] + 1
+        if page[0] < max_pages:
+            return True
+        else:
+            return False
+    except selenium.common.exceptions.NoSuchElementException:
+        return False
 
 
 def verify_date_sorting():
@@ -490,7 +478,6 @@ date_limit_reached = [False]
 
 
 def main():
-    logger.info(f'Scraping up to {args.limit} reviews.')
     res = pd.DataFrame([], columns=SCHEMA)
     sign_in()
 
@@ -503,20 +490,21 @@ def main():
         browser.get(args.url)
         page[0] = get_current_page()
         logger.info(f'Starting from page {page[0]:,}.')
-        time.sleep(1)
     else:
         browser.get(args.url)
         page[0] = get_current_page()
         logger.info(f'Starting from page {page[0]:,}.')
-        time.sleep(1)
 
+    max_reviews = get_max_reviews()
+    max_pages = int((max_reviews - 1) / 10) + 1
+
+    logger.info(f'{max_reviews} English reviews in {max_pages} pages.')
     reviews_df = extract_from_page()
     res = res.append(reviews_df)
 
-    while more_pages() and len(res) < args.limit and not date_limit_reached[0]:
+    while more_pages(max_pages) and len(res) < args.limit and not date_limit_reached[0]:
         args.url = browser.current_url
         browser.get(args.url)
-        # go_to_next_page()
         reviews_df = extract_from_page()
         res = res.append(reviews_df)
 
