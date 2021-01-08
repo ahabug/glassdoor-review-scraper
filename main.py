@@ -12,7 +12,9 @@ from schema import SCHEMA
 
 start = time.time()
 # 设定默认链接，以Shopee为例
-DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Shopee-EI_IE1263091.11,17.htm'
+# DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Amazon-EI_IE6036.11,17.htm'
+DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-GitHub-EI_IE671945.11,17.htm'
+# DEFAULT_URL = 'https://www.glassdoor.com/Overview/Working-at-Shopee-EI_IE1263091.11,17.htm'
 parser = ArgumentParser()
 parser.add_argument('-u', '--url', help='URL of the company\'s Glassdoor landing page.', default=DEFAULT_URL)
 parser.add_argument('-f', '--file', default='glassdoor_ratings.csv', help='Output file.')
@@ -28,8 +30,8 @@ parser.add_argument('--min_date', help='Earliest review date to scrape. Only use
     You also must have sorted Glassdoor reviews DESCENDING by date.',
                     type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"))
 args = parser.parse_args()
-# args.start_from_url = 'https://www.glassdoor.com/Reviews/Shopee-Reviews-E1263091_P29.htm'
-# args.url = 'https://www.glassdoor.com/Reviews/Shopee-Reviews-E1263091_P29.htm'
+args.start_from_url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
+args.url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
 
 if not args.start_from_url and (args.max_date or args.min_date):
     raise Exception('Invalid argument combination: No starting url passed, but max/min date specified.')
@@ -163,11 +165,38 @@ def scrape(field, review, author):
 
     def scrape_helpful(review):
         try:
-            helpful = review.find_element_by_class_name('helpfulCount')
-            res = helpful[helpful.find('(') + 1: -1]
+            helpful = review.find_element_by_class_name('helpfulReviews').text
+            res = helpful.split()[1].replace('(', '').replace(')', '')
+            return res
         except Exception:
             res = 0
         return res
+
+    def scrape_response_date(review):
+        try:
+            response = review.find_element_by_class_name('mb-md-sm').text
+            response = response.split('-')[0]
+            return response
+        except selenium.common.exceptions.NoSuchElementException:
+            return np.nan
+
+    def scrape_response_role(review):
+        try:
+            response = review.find_element_by_class_name('mb-md-sm').text
+            response = response.split('-')[1]
+            return response
+        except Exception:
+            return np.nan
+
+    def scrape_response(review):
+        try:
+            response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
+            response.click()
+            response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[3].text
+            print(response)
+            return response
+        except Exception:
+            return np.nan
 
     def scrape_pros(review):
         try:
@@ -348,7 +377,10 @@ def scrape(field, review, author):
         scrape_senior_management,
         scrape_recommends,
         scrape_outlook,
-        scrape_ceo_approval
+        scrape_ceo_approval,
+        scrape_response_date,
+        scrape_response_role,
+        scrape_response
     ]
 
     fdict = dict((s, f) for (s, f) in zip(SCHEMA, funcs))

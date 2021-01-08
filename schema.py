@@ -23,5 +23,8 @@ SCHEMA = [
     'senior_management',  # senior management，需要匹配
     'recommends',  # 推荐度，可能缺失
     'outlook',  # 未来6月展望如何，可能缺失
-    'CEO_approval'  # 对ceo认同度，可能缺失
+    'CEO_approval',  # 对ceo认同度，可能缺失
+    'response_date',  # 企业官方的回复时间，可能缺失
+    'response_role',    # 企业官方的回复部门，可能缺失
+    'response'  # 企业官方的回复内容，可能缺失
 ]
