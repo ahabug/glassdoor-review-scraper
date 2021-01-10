@@ -1,14 +1,15 @@
-import datetime as dt
 import json
 import logging.config
 import time
 import urllib
-from argparse import ArgumentParser
+import selenium
 import numpy as np
 import pandas as pd
-import selenium
+import datetime as dt
+from argparse import ArgumentParser
 from selenium import webdriver as wd
 from schema import SCHEMA
+from multiprocessing.dummy import Pool as ThreadPool
 
 start = time.time()
 # 设定默认链接，以Shopee为例
@@ -22,21 +23,10 @@ parser.add_argument('--headless', action='store_true', help='Run Chrome in headl
 parser.add_argument('--username', help='Email address used to sign in to GD.')
 parser.add_argument('-p', '--password', help='Password to sign in to GD.')
 parser.add_argument('-c', '--credentials', help='Credentials file')
-parser.add_argument('-l', '--limit', default=60000, action='store', type=int, help='Max reviews to scrape')
 parser.add_argument('--start_from_url', action='store_true', help='Start scraping from the passed URL.')
-parser.add_argument('--max_date', help='Latest review date to scrape. Only use this option with --start_from_url.\
-    You also must have sorted Glassdoor reviews ASCENDING by date.', type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"))
-parser.add_argument('--min_date', help='Earliest review date to scrape. Only use this option with --start_from_url.\
-    You also must have sorted Glassdoor reviews DESCENDING by date.',
-                    type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"))
 args = parser.parse_args()
-args.start_from_url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
-args.url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
-
-if not args.start_from_url and (args.max_date or args.min_date):
-    raise Exception('Invalid argument combination: No starting url passed, but max/min date specified.')
-elif args.max_date and args.min_date:
-    raise Exception('Invalid argument combination: Both min_date and max_date specified.')
+# args.start_from_url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
+# args.url = 'https://www.glassdoor.com/Reviews/GitHub-Reviews-E671945_P5.htm'
 
 if args.credentials:
     with open(args.credentials) as f:
@@ -102,7 +92,7 @@ def scrape(field, review, author):
             return res
 
     def scrape_headline(review):
-        return review.find_element_by_class_name('summary').text.strip('"')
+        return review.find_element_by_class_name('reviewLink').text.strip('"')
 
     def scrape_role(review):
         if 'Anonymous Employee' not in review.text:
@@ -175,7 +165,8 @@ def scrape(field, review, author):
     def scrape_response_date(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
-            response = response.split('-')[0]
+            print(response)
+            response = response.split(' — ')[0]
             return response
         except selenium.common.exceptions.NoSuchElementException:
             return np.nan
@@ -183,7 +174,7 @@ def scrape(field, review, author):
     def scrape_response_role(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
-            response = response.split('-')[1]
+            response = response.split(' — ')[1]
             return response
         except Exception:
             return np.nan
@@ -405,7 +396,7 @@ def extract_from_page():
                 res[field] = scrape(field, review, author)
             assert set(res.keys()) == set(SCHEMA)
             return res
-        except selenium.common.exceptions.NoSuchElementException:
+        except Exception:
             return np.nan
 
     res = pd.DataFrame([], columns=SCHEMA)
@@ -418,11 +409,6 @@ def extract_from_page():
         logger.info(f'Scraped data for "{data["headline"]}"({data["date"]})')
         res.loc[idx[0]] = data
         idx[0] = idx[0] + 1
-
-    if args.max_date and (pd.to_datetime(res['date']).max() > args.max_date) or args.min_date and (
-            pd.to_datetime(res['date']).min() < args.min_date):
-        logger.info('Date limit reached, ending process')
-        date_limit_reached[0] = True
 
     return res
 
@@ -489,25 +475,12 @@ def more_pages(max_pages):
             return True
         else:
             return False
-    except selenium.common.exceptions.NoSuchElementException:
+    except Exception:
         return False
-
-
-def verify_date_sorting():
-    logger.info('Date limit specified, verifying date sorting')
-    ascending = urllib.parse.parse_qs(args.url)['sort.ascending'] == ['true']
-
-    if args.min_date and ascending:
-        raise Exception('min_date required reviews to be sorted DESCENDING by date.')
-    elif args.max_date and not ascending:
-        raise Exception('max_date requires reviews to be sorted ASCENDING by date.')
-
 
 browser = get_browser()
 page = [1]
 idx = [0]
-date_limit_reached = [False]
-
 
 def main():
     res = pd.DataFrame([], columns=SCHEMA)
@@ -517,11 +490,6 @@ def main():
         reviews_exist = navigate_to_reviews()
         if not reviews_exist:
             return
-    elif args.max_date or args.min_date:
-        verify_date_sorting()
-        browser.get(args.url)
-        page[0] = get_current_page()
-        logger.info(f'Starting from page {page[0]:,}.')
     else:
         browser.get(args.url)
         page[0] = get_current_page()
@@ -534,7 +502,7 @@ def main():
     reviews_df = extract_from_page()
     res = res.append(reviews_df)
 
-    while more_pages(max_pages) and len(res) < args.limit and not date_limit_reached[0]:
+    while more_pages(max_pages):
         args.url = browser.current_url
         browser.get(args.url)
         reviews_df = extract_from_page()
@@ -550,3 +518,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # pool = ThreadPool()
+    # pool.map(main())
+    # pool.close() pool.join()

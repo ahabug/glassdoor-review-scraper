@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/glassdoor-review-scraper.iml" filepath="$PROJECT_DIR$/.idea/glassdoor-review-scraper.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../multiprocess_test/.idea/multiprocess_test.iml" filepath="$PROJECT_DIR$/../multiprocess_test/.idea/multiprocess_test.iml" />
     </modules>
   </component>
 </project>
