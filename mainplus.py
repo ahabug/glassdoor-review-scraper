@@ -6,7 +6,6 @@ from multiprocessing.dummy import Pool as ThreadPool
 import numpy as np
 import pandas as pd
 from selenium import webdriver
-
 from schema import SCHEMA
 
 CSV_FILE_PATH = './company_list.csv'
@@ -28,6 +27,7 @@ ch.setFormatter(formatter)
 logging.getLogger('selenium').setLevel(logging.CRITICAL)
 
 start_from_base = True
+failed_company = []
 
 
 def get_driver():
@@ -40,7 +40,7 @@ def get_driver():
 
 def sign_in(driver, company_url, x):
     logger.info(f'"{x}" thread: Signing in to {username}')
-    login_url = 'https://www.glassdoor.com/profile/login_input.htm'
+    login_url = 'https://www.glassdoor.com.hk/profile/login_input.htm?userOriginHook=HEADER_SIGNIN_LINK'
     driver.get(login_url)
 
     email_field = driver.find_element_by_name('username')
@@ -50,6 +50,7 @@ def sign_in(driver, company_url, x):
     email_field.send_keys(username)
     password_field.send_keys(password)
     submit_btn.click()
+    time.sleep(1)
     driver.get(company_url)
 
 
@@ -86,31 +87,31 @@ def get_max_reviews(driver):
 
 
 def scrape(field, review, author, x):
-    def scrape_featured():
+    def scrape_featured(review):
         res = review.find_element_by_class_name('justify-content-between').text
         if 'Featured Review' not in res:
             return 0
         else:
             return 1
 
-    def scrape_covid():
+    def scrape_covid(review):
         res = review.find_element_by_class_name('justify-content-between').text
         if 'COVID-19' not in res:
             return 0
         else:
             return 1
 
-    def scrape_anonymous():
+    def scrape_anonymous(review):
         res = review.find_element_by_class_name('authorJobTitle').text
         if 'Anonymous' in res:
             return 1
         else:
             return 0
 
-    def scrape_date():
+    def scrape_date(review):
         return review.find_element_by_class_name('align-items-center').text
 
-    def scrape_time():
+    def scrape_time(review):
         try:
             res = review.find_element_by_class_name('justify-content-between').find_element_by_tag_name(
                 'time').get_attribute('datetime')
@@ -120,10 +121,10 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_headline():
+    def scrape_headline(review):
         return review.find_element_by_class_name('reviewLink').text.strip('"')
 
-    def scrape_role():
+    def scrape_role(review):
         if 'Anonymous Employee' not in review.text:
             try:
                 res = author.find_element_by_class_name('authorJobTitle').text
@@ -136,7 +137,7 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_location():
+    def scrape_location(review):
         if 'in' in review.text:
             try:
                 res = author.find_element_by_class_name('authorLocation').text
@@ -146,7 +147,7 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_status():
+    def scrape_status(author):
         try:
             res = author.text.split('-')[0]
             if 'Employee' not in res:
@@ -156,7 +157,7 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_contract():
+    def scrape_contract(review):
         try:
             contract = review.find_element_by_class_name('mainText').text
             if 'full-time' in contract:
@@ -173,7 +174,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_years():
+    def scrape_years(review):
         try:
             years = review.find_element_by_class_name('mainText').text
             years = years.split('for')[1]
@@ -182,7 +183,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_helpful():
+    def scrape_helpful(review):
         try:
             helpful = review.find_element_by_class_name('helpfulReviews').text
             res = helpful.split()[1].replace('(', '').replace(')', '')
@@ -191,16 +192,15 @@ def scrape(field, review, author, x):
             res = 0
         return res
 
-    def scrape_response_date():
+    def scrape_response_date(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
-            print(response)
             response = response.split(' — ')[0]
             return response
         except Exception:
             return np.nan
 
-    def scrape_response_role():
+    def scrape_response_role(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
             response = response.split(' — ')[1]
@@ -208,17 +208,16 @@ def scrape(field, review, author, x):
         except Exception:
             return np.nan
 
-    def scrape_response():
+    def scrape_response(review):
         try:
             response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
             response.click()
             response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[3].text
-            print(response)
             return response
         except Exception:
             return np.nan
 
-    def scrape_pros():
+    def scrape_pros(review):
         try:
             res = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
             res.click()
@@ -227,7 +226,7 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_cons():
+    def scrape_cons(review):
         try:
             res = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
             res.click()
@@ -236,7 +235,7 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_advice():
+    def scrape_advice(review):
         try:
             res = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
             res.click()
@@ -245,14 +244,14 @@ def scrape(field, review, author, x):
             res = np.nan
         return res
 
-    def scrape_main_rating():
+    def scrape_main_rating(review):
         try:
             res = review.find_element_by_class_name('v2__EIReviewsRatingsStylesV2__ratingNum').text
         except Exception:
             res = np.nan
         return res
 
-    def scrape_work_life_balance():
+    def scrape_work_life_balance(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -266,7 +265,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_culture_and_values():
+    def scrape_culture_and_values(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -280,7 +279,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_diversity_inclusion():
+    def scrape_diversity_inclusion(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -294,7 +293,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_career_opportunities():
+    def scrape_career_opportunities(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -308,7 +307,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_comp_and_benefits():
+    def scrape_comp_and_benefits(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -322,7 +321,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_senior_management():
+    def scrape_senior_management(review):
         try:
             for i in range(6):
                 subratings_name = review.find_elements_by_class_name('minor')[i].get_attribute('textContent')
@@ -336,7 +335,7 @@ def scrape(field, review, author, x):
             res = np.nan
             return res
 
-    def scrape_recommends():
+    def scrape_recommends(review):
         try:
             res = review.find_element_by_class_name('reviewBodyCell').text
             if 'Recommends' or 'Recommend' in res:
@@ -345,7 +344,7 @@ def scrape(field, review, author, x):
         except Exception:
             return np.nan
 
-    def scrape_outlook():
+    def scrape_outlook(review):
         try:
             res = review.find_element_by_class_name('reviewBodyCell').text
             if 'Outlook' in res:
@@ -358,7 +357,7 @@ def scrape(field, review, author, x):
         except Exception:
             return np.nan
 
-    def scrape_ceo_approval():
+    def scrape_ceo_approval(review):
         try:
             res = review.find_element_by_class_name('reviewBodyCell').text
             if 'CEO' in res:
@@ -418,17 +417,19 @@ def extract_from_page(driver, idx, x):
             assert set(result.keys()) == set(SCHEMA)
             return result
         except Exception:
+            logger.warning('Warning!')
             return np.nan
 
     res = pd.DataFrame([], columns=SCHEMA)
     reviews = driver.find_elements_by_class_name('gdReview')
+
     for review in reviews:
         data = extract_review(review)
         if pd.isnull(data):
             continue
         logger.info(f'"{x}" thread: Scraped data for "{data["headline"]}"({data["date"]})')
-        res.loc[idx[0]] = data
-        idx[0] = idx[0] + 1
+        res.loc[idx] = data
+        idx = idx + 1
     return res
 
 
@@ -436,9 +437,8 @@ def more_pages(page, driver, max_pages, x):
     try:
         next_ = driver.find_element_by_class_name('nextButton')
         next_.click()
-        logger.info(f'"{x}" thread: Going to page {page[0] + 1}.')
-        page[0] = page[0] + 1
-        if page[0] < max_pages:
+        logger.info(f'"{x}" thread: Going to page {page + 1}.')
+        if page < max_pages:
             return True
         else:
             return False
@@ -455,8 +455,8 @@ def main(x):
     logger.info(f'Now we are scraping reviews of No."{x}" company.')
     sign_in(driver, company_url, x)
 
-    page = [1]
-    idx = [0]
+    page = 1
+    idx = 0
     res = pd.DataFrame([], columns=SCHEMA)
 
     if start_from_base:  # if we start from
@@ -465,9 +465,9 @@ def main(x):
             return
     else:
         driver.get(temp_url)
-        page[0] = get_current_page(driver)
+        page = get_current_page(driver)
 
-    logger.info(f'"{x}" thread: Now we are scraping reviews of "{company_name}" from page "{page[0]:,}"')
+    logger.info(f'"{x}" thread: Now we are scraping reviews of "{company_name}" from page "{page}"')
     max_reviews = get_max_reviews(driver)
     max_pages = int((max_reviews - 1) / 10) + 1
     logger.info(f'"{x}" thread: {max_reviews} English reviews in {max_pages} pages.')
@@ -475,14 +475,18 @@ def main(x):
     res = res.append(reviews_df)
 
     while more_pages(page, driver, max_pages, x):
+        page = page + 1
         company_url = driver.current_url
         driver.get(company_url)
+        time.sleep(3)
         reviews_df = extract_from_page(driver, idx, x)
         res = res.append(reviews_df)
 
-    file_name = company_name + '.csv'
-    logger.info(f'"{x}" thread: Writing {len(res)} reviews to file {file_name}.')
-    res.to_csv(file_name, index=False, encoding='utf-8')
+    file_path = 'D:\RA\glassdoor\glassdoor-review-scraper\csv\\' + company_name + '.csv'
+    logger.info(f'"{x}" thread: Writing {len(res)} reviews to file {company_name}.csv.')
+    res.to_csv(file_path, index=False, encoding='utf-8')
+    if len(res) < max_reviews:
+        failed_company.append(company_name)
 
     end_time = time.time()
     logger.info(f'"{x}" thread: Finished in {end_time - start_time} seconds')
@@ -494,7 +498,13 @@ def get_company_list():
 
 
 if __name__ == '__main__':
+    # main(1)
+    start_time_main = time.time()
     pool = ThreadPool()
     pool.map_async(main, get_company_list())
     pool.close()
     pool.join()
+    failed_company = pd.DataFrame(failed_company)
+    failed_company.to_csv('failed_company.csv', index=False)
+    end_time_main = time.time()
+    logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')

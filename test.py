@@ -1,19 +1,11 @@
+# This file is used to practice Python programming.
 import pandas as pd
+company_name = 'abc'
+file_path = 'D:\RA\glassdoor\glassdoor-review-scraper\csv\\' + company_name + '.csv'
+print(file_path)
 
-CSV_FILE_PATH = './company_list.csv'
-df = pd.read_csv(CSV_FILE_PATH)
-
-
-def scrape(x):
-    print(x)
-    print(df)
-    company_name = df.iat[x, 1]
-    # company_url = df[x, 1]
-
-    print(company_name)
-    # print(company_url)
-    # print(company_name)
-
-
-for i in range(5):
-    scrape(i)
+a = 1
+b = 2
+c = [a, b]
+df = pd.DataFrame(c)
+df.to_csv(file_path)
