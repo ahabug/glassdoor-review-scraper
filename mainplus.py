@@ -1,8 +1,10 @@
 import json
 import logging.config
+import math
 import time
 from multiprocessing.dummy import Pool as ThreadPool
 
+import requests
 import numpy as np
 import pandas as pd
 from selenium import webdriver
@@ -28,6 +30,7 @@ logging.getLogger('selenium').setLevel(logging.CRITICAL)
 
 start_from_base = True
 failed_company = []
+API_KEY = '1ac7dc172b226ea535d1b82f1684f1d2'
 
 
 def get_driver():
@@ -195,7 +198,7 @@ def scrape(field, review, author, x):
     def scrape_response_date(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
-            response = response.split(' — ')[0]
+            response = response.split(' – ')[0]
             return response
         except Exception:
             return np.nan
@@ -203,17 +206,25 @@ def scrape(field, review, author, x):
     def scrape_response_role(review):
         try:
             response = review.find_element_by_class_name('mb-md-sm').text
-            response = response.split(' — ')[1]
+            response = response.split(' – ')[1]
             return response
         except Exception:
             return np.nan
 
     def scrape_response(review):
         try:
-            response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
-            response.click()
-            response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[3].text
-            return response
+            if math.isnan(scrape_response_date(review)):  # without response
+                return np.nan
+            elif math.isnan(scrape_advice(review)):  # without advice but with response
+                response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
+                response.click()
+                response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[2].text
+                return response
+            else:  # with advice and response
+                response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
+                response.click()
+                response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[3].text
+                return response
         except Exception:
             return np.nan
 
@@ -439,10 +450,10 @@ def more_pages(page, driver, max_pages, x):
         next_.click()
         logger.info(f'"{x}" thread: Going to page {page + 1}.')
         if page < max_pages:
-            return True
+            return True  # There are some pages left
         else:
-            return False
-    except Exception:
+            return False  # Done!
+    except Exception:  # We are caught!!!
         return False
 
 
@@ -481,12 +492,19 @@ def main(x):
         time.sleep(3)
         reviews_df = extract_from_page(driver, idx, x)
         res = res.append(reviews_df)
+        # if page < max_pages:
+        #     try:
+        #         code = driver.find_element_by_id('recaptcha-token').get_attribute("value")
+        #         open_google(code, driver)
+        #     except Exception:
+        #         pass
 
-    file_path = 'D:\RA\glassdoor\glassdoor-review-scraper\csv\\' + company_name + '.csv'
+    file_path = './csv/' + company_name + '.csv'
     logger.info(f'"{x}" thread: Writing {len(res)} reviews to file {company_name}.csv.')
     res.to_csv(file_path, index=False, encoding='utf-8')
     if len(res) < max_reviews:
-        failed_company.append(company_name)
+        fail = [company_name, page-1]
+        failed_company.append(fail)
 
     end_time = time.time()
     logger.info(f'"{x}" thread: Finished in {end_time - start_time} seconds')
@@ -498,13 +516,34 @@ def get_company_list():
 
 
 if __name__ == '__main__':
-    # main(1)
-    start_time_main = time.time()
-    pool = ThreadPool()
-    pool.map_async(main, get_company_list())
-    pool.close()
-    pool.join()
-    failed_company = pd.DataFrame(failed_company)
-    failed_company.to_csv('failed_company.csv', index=False)
-    end_time_main = time.time()
-    logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
+    main(1)
+    # start_time_main = time.time()
+    # pool = ThreadPool()
+    # pool.map_async(main, get_company_list())
+    # pool.close()
+    # pool.join()
+    # failed_company = pd.DataFrame(failed_company)
+    # failed_company.to_csv('failed_company.csv', index=False)
+    # end_time_main = time.time()
+    # logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
+
+
+def open_google(code, driver):
+    u1 = f"https://2captcha.com/in.php?key={API_KEY}&method=userrecaptcha&googlekey={code}&pageurl={driver.current_url}&json=1&invisible=1"
+    r1 = requests.get(u1)
+    rid = r1.json().get("request")
+    u2 = f"https://2captcha.com/res.php?key={API_KEY}&action=get&id={int(rid)}&json=1"
+    time.sleep(25)
+    while True:
+        print(u2)
+        r2 = requests.get(u2)
+        print(r2.json())
+        if r2.json().get("status") == 1:
+            form_tokon = r2.json().get("request")
+            break
+        time.sleep(5)
+    wirte_tokon_js = f'document.getElementById("g-recaptcha-response").innerHTML="{form_tokon}";'
+    submit_js = 'document.getElementById("recaptcha-demo-form").submit();'
+    driver.execute_script(wirte_tokon_js)
+    time.sleep(1)
+    driver.execute_script(submit_js)
