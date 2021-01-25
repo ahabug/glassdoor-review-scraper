@@ -112,7 +112,8 @@ def scrape(field, review, author, x):
             return 0
 
     def scrape_date(review):
-        return review.find_element_by_class_name('align-items-center').text
+        res = review.find_element_by_class_name('align-items-center').find_element_by_class_name('subtle').text
+        return res
 
     def scrape_time(review):
         try:
@@ -213,18 +214,17 @@ def scrape(field, review, author, x):
 
     def scrape_response(review):
         try:
-            if math.isnan(scrape_response_date(review)):  # without response
-                return np.nan
-            elif math.isnan(scrape_advice(review)):  # without advice but with response
+            if type(scrape_response_date(review)) == float:  # without response
+                response = np.nan
+            elif type(scrape_advice(review)) == float:  # with response but without advice
                 response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
                 response.click()
                 response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[2].text
-                return response
             else:  # with advice and response
                 response = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
                 response.click()
                 response = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[3].text
-                return response
+            return response
         except Exception:
             return np.nan
 
@@ -516,16 +516,16 @@ def get_company_list():
 
 
 if __name__ == '__main__':
-    # main(1)
-    start_time_main = time.time()
-    pool = ThreadPool()
-    pool.map_async(main, get_company_list())
-    pool.close()
-    pool.join()
-    failed_company = pd.DataFrame(failed_company)
-    failed_company.to_csv('failed_company.csv', index=False)
-    end_time_main = time.time()
-    logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
+    main(0)
+    # start_time_main = time.time()
+    # pool = ThreadPool()
+    # pool.map_async(main, get_company_list())
+    # pool.close()
+    # pool.join()
+    # failed_company = pd.DataFrame(failed_company)
+    # failed_company.to_csv('failed_company.csv', index=False)
+    # end_time_main = time.time()
+    # logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
 
 
 def open_google(code, driver):
