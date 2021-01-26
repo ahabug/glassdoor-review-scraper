@@ -248,9 +248,11 @@ def scrape(field, review, author, x):
 
     def scrape_advice(review):
         try:
-            res = review.find_element_by_class_name('v2__EIReviewDetailsV2__fullWidth')
+            res = review.find_elements_by_class_name('v2__EIReviewDetailsV2__fullWidth')[2]
             res.click()
-            res = review.find_elements_by_class_name('v2__EIReviewDetailsV2__isExpanded')[2].text
+            if 'Advice to Management' in res.text:
+                return res.find_element_by_class_name('v2__EIReviewDetailsV2__isExpanded').text
+            res = np.nan
         except Exception:
             res = np.nan
         return res
