@@ -54,7 +54,17 @@ def sign_in(driver, company_url, x):
     password_field.send_keys(password)
     submit_btn.click()
     time.sleep(1)
+    detect_safe(driver)
     driver.get(company_url)
+
+
+def detect_safe(driver):
+    try:
+        page = driver.find_element_by_class_name('center')
+        if 'Help Us Keep Glassdoor Safe' in page.text:
+            time.sleep(10)
+    except Exception:
+        pass
 
 
 def no_reviews():
@@ -65,9 +75,11 @@ def no_reviews():
 def navigate_to_reviews(driver, company_name, company_url, x):
     logger.info(f'"{x}" thread: Navigating to company {company_name} reviews')
     driver.get(company_url)
+    time.sleep(10)
     if no_reviews():
         logger.info(f'"{x}" thread: No reviews to scrape!')
         return False
+    detect_safe(driver)
     reviews_cell = driver.find_element_by_xpath('//a[@data-label="Reviews"]')
     reviews_path = reviews_cell.get_attribute('href')
     driver.get(reviews_path)
@@ -489,6 +501,7 @@ def main(x):
 
     while more_pages(page, driver, max_pages, x):
         page = page + 1
+        detect_safe(driver)
         company_url = driver.current_url
         driver.get(company_url)
         time.sleep(3)
@@ -505,7 +518,7 @@ def main(x):
     logger.info(f'"{x}" thread: Writing {len(res)} reviews to file {company_name}.csv.')
     res.to_csv(file_path, index=False, encoding='utf-8')
     if len(res) < max_reviews:
-        fail = [company_name, page-1]
+        fail = [company_name, page - 1]
         failed_company.append(fail)
 
     end_time = time.time()
