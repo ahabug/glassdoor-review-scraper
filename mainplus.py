@@ -165,7 +165,8 @@ def scrape(field, review, author, x):
 
     def scrape_status(author):
         try:
-            res = author.text.split('-')[0]
+            res = author.find_element_by_class_name('authorJobTitle').text
+            res = res.split('-')[0]
             if 'Employee' not in res:
                 res = np.nan
         except Exception:
@@ -531,16 +532,16 @@ def get_company_list():
 
 
 if __name__ == '__main__':
-    main(0)
-    # start_time_main = time.time()
-    # pool = ThreadPool()
-    # pool.map_async(main, get_company_list())
-    # pool.close()
-    # pool.join()
-    # failed_company = pd.DataFrame(failed_company)
-    # failed_company.to_csv('failed_company.csv', index=False)
-    # end_time_main = time.time()
-    # logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
+    # main(0)
+    start_time_main = time.time()
+    pool = ThreadPool()
+    pool.map_async(main, get_company_list())
+    pool.close()
+    pool.join()
+    failed_company = pd.DataFrame(failed_company)
+    failed_company.to_csv('failed_company.csv', index=False)
+    end_time_main = time.time()
+    logger.info(f'Finished in {(end_time_main - start_time_main) / 60} minutes')
 
 
 def open_google(code, driver):
