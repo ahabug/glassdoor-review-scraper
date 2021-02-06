@@ -532,7 +532,7 @@ def get_company_list():
 
 
 if __name__ == '__main__':
-    # main(0)
+    # main(4)
     start_time_main = time.time()
     pool = ThreadPool()
     pool.map_async(main, get_company_list())
